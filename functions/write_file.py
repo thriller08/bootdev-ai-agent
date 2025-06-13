@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-def get_file_content(working_directory, file):
+def write_file(working_directory, file, content):
     try:
         work_dir_path = os.path.abspath(Path(working_directory).resolve(strict=True))
         file_path = os.path.abspath(os.path.join(work_dir_path, file))
@@ -9,19 +9,17 @@ def get_file_content(working_directory, file):
         return "Error: Cannot resolve working directory"
 
     if not file_path.startswith(work_dir_path):
-        return f'Error: Cannot read "{file}" as it is outside the permitted working directory'
+        return f'Error: Cannot write to "{file}" as it is outside the permitted working directory'
 
-    if not os.path.isfile(file_path):
-        return f'Error: File not found or is not a regular file: "{file}"'
-
-    MAX_CHARS = 10000
     try:
-        with open(file_path, "r") as f:
-            file_content_string = f.read(MAX_CHARS)
-            if len(file_content_string) == MAX_CHARS:
-                file_content_string = file_content_string + f'[...File "{file}" truncated at 10000 characters]'
-    except:
-        return f'Error: Error reading file: "{file}"'
+        directory = os.path.dirname(file_path)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
-    return file_content_string
+        with open(file_path, "w+") as f:
+            bytes_written = f.write(content)
+    except:
+        return f'Error: Error writing file: "{file}"'
+
+    return f'Successfully wrote to "{file}" ({bytes_written} characters written)'
 
