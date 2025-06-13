@@ -3,6 +3,10 @@ import sys
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from functions.get_files_info import get_files_info
+from functions.get_file_content import get_file_content
+from functions.write_file import write_file
+from functions.run_python_file import run_python_file
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -103,15 +107,63 @@ messages = [
     types.Content(role="user", parts=[types.Part(text=user_prompt)]),
 ]
 
+def call_function(function_call_part, verbose=False):
+    avail_funcs = {
+        "get_files_info": get_files_info,
+        "get_file_content": get_file_content,
+        "write_file": write_file,
+        "run_python_file": run_python_file,
+    }
+
+    function_name = function_call_part.name
+    if verbose:
+        print(f" - Calling function: {function_name}({function_call_part.args})")
+    else:
+        print(f" - Calling function: {function_name}")
+
+    args = function_call_part.args
+    args['working_directory'] = "./calculator"
+
+    if function_name not in avail_funcs.keys():
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                    name=function_name,
+                    response={"error": f"Unknown function: {function_name}"},
+                )
+            ],
+        )
+
+    function_result = avail_funcs[function_name](**args)
+    
+    return types.Content(
+        role="tool",
+        parts=[
+            types.Part.from_function_response(
+                name=function_name,
+                response={"result": function_result},
+            )
+        ],
+    )
+
+
 client = genai.Client(api_key=api_key)
 response = client.models.generate_content(model="gemini-2.0-flash-001", config=config, contents=messages)
 
+verbose = False
 if len(sys.argv) > 2 and sys.argv[2] == "--verbose":
+    verbose = True
     print("User prompt:", user_prompt)
     print("Prompt tokens:", response.usage_metadata.prompt_token_count)
     print("Response tokens:", response.usage_metadata.candidates_token_count)
 
-print(response.text)
 if len(response.function_calls) > 0:
     for call in response.function_calls:
-        print(f"Calling function: {call.name}({call.args})")
+        func_result = call_function(call, verbose=verbose)
+        if func_result.parts[0].function_response.response is None:
+            raise Exception(f"error calling function: {call}")
+        if verbose:
+            print(f"-> {func_result.parts[0].function_response.response}")
+else:
+    print(response.text)
